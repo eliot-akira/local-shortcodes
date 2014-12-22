@@ -1,5 +1,12 @@
 <?php
 /**
+ *
+ * Local Shortcodes
+ * 
+ * Adapted from WordPress core:
+ * https://github.com/WordPress/WordPress/blob/master/wp-includes/shortcodes.php
+ * 
+ * ---
  * WordPress API for creating bbcode like tags or what WordPress calls
  * "shortcodes." The tag and attribute parsing or regular expression code is
  * based on the Textpattern tag parser.
@@ -32,17 +39,25 @@
  * @since 2.5.0
  */
 
+// Declare only once
+if (function_exists('add_local_shortcode')) return;
+
 /**
- * Container for storing shortcode tags and their hook to call for the shortcode
+ * Container for storing local shortcode function hooks, by context and tag
  *
  * @since 2.5.0
  *
  * @name $local_shortcode_tags
  * @var array
  * @global array $local_shortcode_tags
+ * @example $local_shortcode_tags['context']['tag']
+ *  
  */
+
 $local_shortcode_tags = array();
-$current_local_shortcodes = array();
+
+// Current context: support nested local shortcodes by restoring parent namespace
+$current_local_shortcode_context = '';
 
 /**
  * Add hook for shortcode tag.
@@ -191,19 +206,36 @@ function has_local_shortcode( $content, $tag, $global_tag ) {
  * @param string $content Content to search for shortcodes
  * @return string Content with shortcodes filtered out.
  */
-function do_local_shortcode($global_tag, $content) {
+function do_local_shortcode($global_tag, $content, $do_global = false) {
 	global $local_shortcode_tags;
-	global $current_local_shortcodes;
-	$current_local_shortcodes = $local_shortcode_tags[$global_tag];
+	global $current_local_shortcode_context;
 
-	if ( false === strpos( $content, '[' ) )
+	// No shortcode in content, or no local shortcode registered in this namespace
+	if ( false === strpos( $content, '[' )  || !isset($local_shortcode_tags[$global_tag]))
 		return $content;
+
+	$current_local_shortcodes = $local_shortcode_tags[$global_tag];
 
 	if ( empty( $current_local_shortcodes ) || ! is_array( $current_local_shortcodes ) )
 		return $content;
 
+	// Store previous namespace and declare current one
+	$previous_context = $current_local_shortcode_context;
+	$current_local_shortcode_context = $global_tag;
+
+
 	$pattern = get_local_shortcode_regex($global_tag);
-	return preg_replace_callback( "/$pattern/s", 'do_local_shortcode_tag', $content );
+
+	$content = preg_replace_callback( "/$pattern/s", 'do_local_shortcode_tag', $content );
+
+
+	// Restore previous namespace
+	$current_local_shortcode_context = $previous_context;
+
+	if ($do_global)
+		return do_shortcode($content);
+	else
+		return $content;
 }
 
 /**
@@ -213,14 +245,21 @@ function do_local_shortcode($global_tag, $content) {
  */
 function do_local_shortcode_with($global_tag, $content, $post) {
 	global $local_shortcode_tags;
-	global $current_local_shortcodes;
-	$current_local_shortcodes = $local_shortcode_tags[$global_tag];
+	global $current_local_shortcode_context;
 
-	if ( false === strpos( $content, '[' ) )
+	// No shortcode in content, or no local shortcode registered in this namespace
+	if ( false === strpos( $content, '[' )  || !isset($local_shortcode_tags[$global_tag]))
 		return $content;
+
+	$current_local_shortcodes = $local_shortcode_tags[$global_tag];
 
 	if ( empty( $current_local_shortcodes ) || ! is_array( $current_local_shortcodes ) )
 		return $content;
+
+	// Store previous namespace and declare current one
+	$previous_context = $current_local_shortcode_context;
+	$current_local_shortcode_context = $global_tag;
+
 
 	$pattern = get_local_shortcode_regex($global_tag);
 	
@@ -243,6 +282,11 @@ function do_local_shortcode_with($global_tag, $content, $post) {
 	foreach ( $new_matches as $m ) {
 		$output_string .= do_local_shortcode_tag_with( $m , $post );
 	}
+
+
+	// Restore previous namespace
+	$current_local_shortcode_context = $previous_context;
+
 	return $output_string;
 }
 
@@ -251,7 +295,9 @@ function do_local_shortcode_with($global_tag, $content, $post) {
  */
 function do_local_shortcode_tag_with( $m, $post = null ) {
 	global $local_shortcode_tags;
-	global $current_local_shortcodes;
+	global $current_local_shortcode_context;
+
+	$context = $current_local_shortcode_context;
 
 	// allow [[foo]] syntax for escaping a tag
 	if ( $m[1] == '[' && $m[6] == ']' ) {
@@ -263,10 +309,10 @@ function do_local_shortcode_tag_with( $m, $post = null ) {
 
 	if ( isset( $m[5] ) ) {
 		// enclosing tag - extra parameter
-		return $m[1] . call_user_func( $current_local_shortcodes[$tag], $attr, $m[5], $tag, $post ) . $m[6];
+		return $m[1] . call_user_func( $local_shortcode_tags[$context][$tag], $attr, $m[5], $tag, $post ) . $m[6];
 	} else {
 		// self-closing tag
-		return $m[1] . call_user_func( $current_local_shortcodes[$tag], $attr, null,  $tag, $post ) . $m[6];
+		return $m[1] . call_user_func( $local_shortcode_tags[$context][$tag], $attr, null,  $tag, $post ) . $m[6];
 	}
 }
 
@@ -283,7 +329,9 @@ function do_local_shortcode_tag_with( $m, $post = null ) {
  */
 function do_local_shortcode_tag( $m ) {
 	global $local_shortcode_tags;
-	global $current_local_shortcodes;
+	global $current_local_shortcode_context;
+
+	$context = $current_local_shortcode_context;
 
 	// allow [[foo]] syntax for escaping a tag
 	if ( $m[1] == '[' && $m[6] == ']' ) {
@@ -295,10 +343,10 @@ function do_local_shortcode_tag( $m ) {
 
 	if ( isset( $m[5] ) ) {
 		// enclosing tag - extra parameter
-		return $m[1] . call_user_func( $current_local_shortcodes[$tag], $attr, $m[5], $tag ) . $m[6];
+		return $m[1] . call_user_func( $local_shortcode_tags[$context][$tag], $attr, $m[5], $tag ) . $m[6];
 	} else {
 		// self-closing tag
-		return $m[1] . call_user_func( $current_local_shortcodes[$tag], $attr, null,  $tag ) . $m[6];
+		return $m[1] . call_user_func( $local_shortcode_tags[$context][$tag], $attr, null,  $tag ) . $m[6];
 	}
 }
 
