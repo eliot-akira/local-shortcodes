@@ -2,6 +2,7 @@
 /**
  *
  * Local Shortcodes
+ * @version  0.0.2
  * 
  * Adapted from WordPress core:
  * https://github.com/WordPress/WordPress/blob/master/wp-includes/shortcodes.php
@@ -40,7 +41,7 @@
  */
 
 // Declare only once
-if (function_exists('add_local_shortcode')) return;
+if ( ! function_exists('add_local_shortcode') ) {
 
 /**
  * Container for storing local shortcode function hooks, by context and tag
@@ -480,3 +481,4 @@ function strip_local_shortcode( $global_tag, $content ) {
 }
 
 // add_filter('the_content', 'do_local_shortcode', 12); // AFTER wpautop()
+}
