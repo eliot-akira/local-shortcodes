@@ -1,6 +1,6 @@
 ### Local shortcodes
 
-Register and run shortcodes within a given namespace.
+Register and run shortcodes within a local namespace.
 
 This avoids competing with shortcode names used by other themes and plugins.
 
@@ -59,7 +59,10 @@ remove_all_local_shortcodes('context');
 ###### Inside parent shortcode
 
 ```
+// Register parent shortcode in global namespace
 add_shortcode('parent', 'parent_shortcode');
+
+// Register child shortcode in local namespace
 add_local_shortcode('parent', 'child', 'child_shortcode');
 
 function parent_shortcode( $atts, $content ) {
@@ -69,4 +72,9 @@ function parent_shortcode( $atts, $content ) {
   return do_local_shortcode('parent', $content);
 }
 
+function child_shortcode( $atts, $content ) {
+
+  ...Do stuff here..
+
+}
 ```
